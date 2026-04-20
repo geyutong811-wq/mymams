@@ -1,0 +1,16 @@
+langgraph==0.2.0
+langchain==0.2.14
+langchain-openai==0.1.22
+pydantic==2.5.0
+python-dotenv==1.0.0
+spleeter==2.4.0
+librosa==0.10.1
+soundfile==0.12.1
+pyloudnorm==0.1.1
+requests==2.31.0
+replicate==0.30.0
+google-cloud-aiplatform==1.38.0
+openai==1.42.0
+numpy==1.23.5
+pandas==1.5.3
+typing-extensions==4.12.2

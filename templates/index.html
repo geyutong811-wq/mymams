@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MAMS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          animation: { blob: "blob 15s infinite alternate" },
+          keyframes: {
+            blob: {
+              "0%": { transform: "translate(0px,0px) scale(1)" },
+              "33%": { transform: "translate(30px,-50px) scale(1.1)" },
+              "66%": { transform: "translate(-20px,20px) scale(0.9)" },
+              "100%": { transform: "translate(0px,0px) scale(1)" }
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .animation-delay-2000 { animation-delay: 2s; }
+    .animation-delay-4000 { animation-delay: 4s; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156,163,175,0.3); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(156,163,175,0.5); }
+  </style>
+</head>
+
+<body class="min-h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-800 dark:text-gray-100 font-sans selection:bg-indigo-500/30 overflow-x-hidden relative transition-colors duration-500">
+  {% csrf_token %}
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    /* 👇 告诉 Django 不要解析下面的 React 语法 👇 */
+    {% verbatim %}
+
+    const { useState, useEffect } = React;
+
+    const STYLES = [
+      {
+        id: "cyberpunk",
+        zh: "流行电子",
+        en: "Pop Electronic",
+        img: "/static/images/image_8f91ea.png",
+        fallback: "https://images.unsplash.com/photo-1571266028243-e4733b0f0bb1?w=400&q=80"
+      },
+      {
+        id: "epic",
+        zh: "震撼交响",
+        en: "Epic Orchestral",
+        img: "/static/images/image_8fe406.png",
+        fallback: "https://images.unsplash.com/photo-1465847736476-59c11718782a?w=400&q=80"
+      },
+      {
+        id: "lofi",
+        zh: "治愈轻音乐",
+        en: "Lo-Fi Chill",
+        img: "/static/images/image_8fe481.png",
+        fallback: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80"
+      },
+      {
+        id: "commercial",
+        zh: "短视频配乐",
+        en: "Commercial BGM",
+        img: "/static/images/image_8fe7e6.png",
+        fallback: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80"
+      }
+    ];
+
+    const AGENTS = [
+      { zh: "1. 需求分析", en: "1. Analyze Request", workZh: "正在深度解析提示词，提取情感、节奏、流派等核心参数，构建创作简报...", workEn: "Parsing prompt and extracting core parameters to build a creative brief..." },
+      { zh: "2. 风格检索", en: "2. Style Retrieval", workZh: "正在检索海量音乐知识库，精准匹配最佳参考曲风与和声走向...", workEn: "Retrieving music knowledge base and matching the best style and harmony..." },
+      { zh: "3. 主轨生成", en: "3. Main Track", workZh: "正在编写主旋律与人声主轨，奠定整首歌曲的音乐骨架...", workEn: "Generating main melody and vocal track to establish the song's skeleton..." },
+      { zh: "4. 伴奏生成", en: "4. Backing Track", workZh: "正在生成贝斯、鼓点及氛围合成器等多轨高品质伴奏层...", workEn: "Generating multi-track backing layers including bass, drums, and synths..." },
+      { zh: "5. 混音导出", en: "5. Mix & Export", workZh: "正在进行多轨混音、EQ均衡、响度归一化并导出最终高保真音频...", workEn: "Mixing, equalizing, normalizing, and exporting high-fidelity audio..." }
+    ];
+
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+      return match ? decodeURIComponent(match[2]) : "";
+    }
+
+    function fmtTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return m + ":" + String(s).padStart(2, "0");
+    }
+
+    function App() {
+      const [lang, setLang] = useState("zh");
+      const [dark, setDark] = useState(true);
+      const [prompt, setPrompt] = useState("");
+      const [styleId, setStyleId] = useState("cyberpunk");
+      const [duration, setDuration] = useState(180);
+      const [features, setFeatures] = useState({ stem: true, vocal: true, cost: true });
+      const [voiceType, setVoiceType] = useState("female");
+      const [isGenerating, setIsGenerating] = useState(false);
+      const [progress, setProgress] = useState(0);
+      const [statuses, setStatuses] = useState(["idle", "idle", "idle", "idle", "idle"]);
+      const [error, setError] = useState("");
+      const [result, setResult] = useState(null);
+      const [showSettings, setShowSettings] = useState(false);
+      const [showLogin, setShowLogin] = useState(false);
+
+      useEffect(() => {
+        if (dark) {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      }, [dark]);
+
+      const t = (zh, en) => (lang === "zh" ? zh : en);
+
+      const toggleFeature = (k) => setFeatures((p) => ({ ...p, [k]: !p[k] }));
+
+      async function onGenerate() {
+        if (!prompt.trim() || isGenerating) return;
+        setError("");
+        setResult(null);
+        setIsGenerating(true);
+        setProgress(0);
+        setStatuses(["working", "idle", "idle", "idle", "idle"]);
+
+        let step = 0;
+        const stepTimer = setInterval(() => {
+          step = Math.min(step + 1, 4);
+          const next = ["idle", "idle", "idle", "idle", "idle"];
+          for (let i = 0; i < 5; i++) {
+            if (i < step) next[i] = "done";
+            else if (i === step) next[i] = "working";
+          }
+          if (step === 4) next.fill("working");
+          setStatuses(next);
+        }, 3500);
+
+        const pTimer = setInterval(() => setProgress((p) => Math.min(p + 1, 95)), 400);
+
+        try {
+          const res = await fetch("/api/generate/", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": getCookie("csrftoken")
+            },
+            body: JSON.stringify({
+              prompt: prompt.trim(),
+              style_id: styleId,
+              duration_seconds: duration,
+              enable_stem_separation: features.stem,
+              enable_vocal_synthesis: features.vocal,
+              enable_cost_tracking: features.cost,
+              vocal_voice_type: voiceType
+            })
+          });
+          const payload = await res.json();
+          if (!payload.ok) throw new Error(payload.error || "Generate failed");
+          setProgress(100);
+          setStatuses(["done", "done", "done", "done", "done"]);
+          setResult(payload.result);
+        } catch (e) {
+          setError(String(e.message || e));
+          setStatuses(["idle", "idle", "idle", "idle", "idle"]);
+        } finally {
+          clearInterval(stepTimer);
+          clearInterval(pTimer);
+          setIsGenerating(false);
+        }
+      }
+
+      const costText = result
+        ? (!features.cost ? t("成本监控已关闭", "Cost tracking off") : `${t("花费", "Cost")}: $${(result.total_cost || 0).toFixed(4)}`)
+        : "—";
+
+      return (
+        <div className="relative min-h-screen flex flex-col transition-colors duration-500">
+          {/* 背景与光晕：增加了亮色模式下清新的浅色渐变和光斑 */}
+          <div className="fixed inset-0 z-[-2] bg-gradient-to-br from-indigo-50 via-white to-cyan-50 dark:from-[#0f172a] dark:via-[#1e1b4b] dark:to-[#020617] transition-colors duration-500"></div>
+          <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none opacity-100 dark:opacity-60 transition-opacity duration-500">
+            <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-indigo-300/40 dark:bg-indigo-600/20 rounded-full blur-[120px] animate-blob"></div>
+            <div className="absolute top-[20%] right-[-10%] w-[35rem] h-[35rem] bg-fuchsia-300/30 dark:bg-fuchsia-600/20 rounded-full blur-[120px] animate-blob animation-delay-2000"></div>
+            <div className="absolute bottom-[-20%] left-[20%] w-[50rem] h-[50rem] bg-cyan-300/30 dark:bg-cyan-600/15 rounded-full blur-[150px] animate-blob animation-delay-4000"></div>
+          </div>
+
+          {/* 顶部导航 */}
+          <header className="border-b border-slate-200 dark:border-white/5 backdrop-blur-xl sticky top-0 z-50 bg-white/60 dark:bg-white/5 transition-colors duration-500">
+            <div className="max-w-[1200px] mx-auto px-6 h-20 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-[1rem] bg-gradient-to-br from-indigo-500 to-purple-500 shadow-[0_0_20px_rgba(99,102,241,0.4)] flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight text-slate-800 dark:text-white transition-colors">MAMS</h1>
+                  <p className="text-xs text-indigo-500 dark:text-indigo-200/70 tracking-wider transition-colors">Multi-Agent Music System</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowLogin(true)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium bg-white/80 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white transition-all shadow-sm dark:shadow-none">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {t("Log in", "Log in")}
+                </button>
+                <button onClick={() => setShowSettings((v) => !v)} className="p-2.5 rounded-full bg-white/80 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-300 transition-all shadow-sm dark:shadow-none">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* 设置下拉面板 - 支持双主题适配 */}
+            {showSettings && (
+              <div className="max-w-[1200px] mx-auto px-6 py-4 flex gap-6 text-sm border-t border-slate-200 dark:border-white/5 bg-white/50 dark:bg-transparent backdrop-blur-xl animate-fade-in transition-colors">
+                  <div className="flex items-center gap-2">
+                      <span className="text-slate-500 dark:text-slate-400">{t("语言","Lang")}:</span>
+                      <button onClick={() => setLang("zh")} className={`px-3 py-1.5 rounded-lg transition-colors ${lang === "zh" ? "bg-indigo-500 text-white shadow-sm" : "bg-white/60 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 text-slate-600 dark:text-gray-300"}`}>中文</button>
+                      <button onClick={() => setLang("en")} className={`px-3 py-1.5 rounded-lg transition-colors ${lang === "en" ? "bg-indigo-500 text-white shadow-sm" : "bg-white/60 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 text-slate-600 dark:text-gray-300"}`}>EN</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                      <span className="text-slate-500 dark:text-slate-400">{t("外观","Theme")}:</span>
+                      <button onClick={() => setDark(false)} className={`px-3 py-1.5 rounded-lg transition-colors ${!dark ? "bg-indigo-500 text-white shadow-sm" : "bg-white/60 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 text-slate-600 dark:text-gray-300"}`}>{t("亮色","Light")}</button>
+                      <button onClick={() => setDark(true)} className={`px-3 py-1.5 rounded-lg transition-colors ${dark ? "bg-indigo-500 text-white shadow-sm" : "bg-white/60 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 text-slate-600 dark:text-gray-300"}`}>{t("暗色","Dark")}</button>
+                  </div>
+              </div>
+            )}
+          </header>
+
+          <main className="max-w-[1200px] mx-auto px-6 py-10 flex flex-col gap-10 flex-1 w-full">
+            {/* 上侧：创作需求 */}
+            <section>
+              <div className="border rounded-[2rem] p-8 bg-white/70 dark:bg-white/5 backdrop-blur-2xl border-white dark:border-white/10 shadow-xl shadow-indigo-100/50 dark:shadow-black/50 transition-colors duration-500">
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-slate-800 dark:text-white transition-colors">
+                  <span className="text-indigo-500 dark:text-indigo-400">✦</span>{t("创作需求", "Creation Details")}
+                </h2>
+                <textarea
+                  rows="4"
+                  className="w-full border rounded-2xl p-5 text-lg bg-white/50 dark:bg-black/20 border-slate-200 dark:border-white/10 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all resize-none"
+                  placeholder={t("例如：一首赛博朋克风格的流行电子乐，带有空灵的女声，歌词关于未来的霓虹城市...", "E.g. Cyberpunk electronic pop with ethereal vocals...")}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                />
+
+                <div className="mt-8 mb-4">
+                  <span className="text-slate-500 dark:text-gray-400 text-sm font-medium">{t("曲风选定", "Select Style")}</span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {STYLES.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setStyleId(s.id)}
+                      className={`group relative h-28 rounded-2xl overflow-hidden border transition-all duration-300 ${styleId === s.id ? "border-indigo-500 ring-4 ring-indigo-500/20 scale-[1.02] shadow-md" : "border-slate-200 dark:border-white/10 hover:border-indigo-300 dark:hover:border-white/30"}`}
+                    >
+                      <img
+                        src={s.img}
+                        onError={(e) => { e.target.onerror = null; e.target.src = s.fallback; }}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-90 dark:opacity-80 group-hover:opacity-100"
+                        alt={s.en}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
+                      <div className="absolute bottom-3 left-4 text-left">
+                        <div className="text-xs text-indigo-300 font-semibold mb-0.5">{s.en}</div>
+                        <div className="text-base font-bold text-white drop-shadow-md">{s.zh}</div>
+                      </div>
+                      {styleId === s.id && (
+                        <div className="absolute top-2 right-2 bg-indigo-500 rounded-full p-0.5 shadow-sm">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-8">
+                  <div className="flex justify-between items-end mb-2">
+                    <span className="text-sm font-medium text-slate-500 dark:text-gray-400">{t("生成时长 最高10分钟", "Target Duration Max 10m")}</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 font-bold text-2xl">{fmtTime(duration)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="600"
+                    step="10"
+                    value={duration}
+                    onChange={(e) => setDuration(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-200 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
+                </div>
+
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 音轨分离 */}
+                  <div className="p-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/5 hover:border-indigo-200 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={features.stem}
+                        onChange={() => toggleFeature("stem")}
+                        className="w-5 h-5 rounded border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-50 dark:focus:ring-offset-gray-900"
+                      />
+                      <span className="text-lg font-bold text-slate-800 dark:text-gray-200 transition-colors">{t("音轨分离", "Stem Separation")}</span>
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-2 pl-8 transition-colors">
+                      {t("将生成的音乐拆分为人声、鼓点、贝斯等独立的高质量多轨文件，方便后期二次创作。", "Separate generated music into independent high-quality stems like vocals, drums, and bass for post-production.")}
+                    </p>
+                  </div>
+
+                  {/* 人声合成 */}
+                  <div className="p-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/5 hover:border-indigo-200 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={features.vocal}
+                        onChange={() => toggleFeature("vocal")}
+                        className="w-5 h-5 rounded border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-50 dark:focus:ring-offset-gray-900"
+                      />
+                      <span className="text-lg font-bold text-slate-800 dark:text-gray-200 transition-colors">{t("人声合成", "Vocal Synthesis")}</span>
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-2 pl-8 mb-2 transition-colors">
+                      {t("激活主唱智能体，根据情感和流派自动生成并合成极其逼真的人声演唱轨道。", "Activate the vocal agent to synthesize realistic human singing based on emotion and genre.")}
+                    </p>
+                    {features.vocal && (
+                      <div className="flex gap-2 pl-8">
+                        {["male","female","child"].map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setVoiceType(v)}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${voiceType === v ? "bg-indigo-500 text-white shadow-sm" : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-gray-300 hover:bg-slate-300 dark:hover:bg-white/20"}`}
+                          >
+                            {v.charAt(0).toUpperCase() + v.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 成本监控 */}
+                  <div className="p-4 rounded-2xl bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/5 hover:border-indigo-200 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={features.cost}
+                        onChange={() => toggleFeature("cost")}
+                        className="w-5 h-5 rounded border-slate-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-50 dark:focus:ring-offset-gray-900"
+                      />
+                      <span className="text-lg font-bold text-slate-800 dark:text-gray-200 transition-colors">{t("成本监控", "Cost Monitor")}</span>
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-2 pl-8 transition-colors">
+                      {t("实时计算并追踪当前生成任务所消耗的各个大语言模型及音频模型的 API 成本花销。", "Track API costs consumed by various LLMs and audio models for the current task in real-time.")}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={onGenerate}
+                  disabled={!prompt.trim() || isGenerating}
+                  className={`w-full mt-10 py-5 rounded-2xl text-xl font-bold text-white transition-all ${!prompt.trim() || isGenerating ? "bg-slate-300 dark:bg-white/10 text-slate-500 dark:text-gray-500 cursor-not-allowed" : "bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-600 shadow-[0_0_30px_rgba(99,102,241,0.3)] dark:shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-[1.01]"}`}
+                >
+                  {isGenerating ? `${t("系统创作中", "Generating")} ${progress}%` : t("开始生成音乐", "Generate Music")}
+                </button>
+                {error && <p className="mt-3 text-sm text-red-500 dark:text-red-400 text-center">{error}</p>}
+              </div>
+            </section>
+
+            {/* 下侧：协作流程 & 生成结果 */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+
+              {/* 流程区 */}
+              <div className="border rounded-[2rem] p-8 bg-white/70 dark:bg-white/5 backdrop-blur-2xl border-white dark:border-white/10 shadow-xl shadow-indigo-100/50 dark:shadow-black/50 h-fit transition-colors duration-500">
+                <h2 className="text-2xl font-bold mb-8 text-slate-800 dark:text-white transition-colors">{t("多智能体协作流程", "Multi-Agent Workflow")}</h2>
+                <div className="space-y-4">
+                  {AGENTS.map((a, i) => {
+                    const st = statuses[i];
+                    const isW = st === "working";
+                    const isD = st === "done";
+                    return (
+                      <div key={i} className={`p-5 rounded-2xl border transition-all duration-500 ${isW ? "border-indigo-300 dark:border-indigo-500/50 bg-indigo-50/80 dark:bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.15)] dark:shadow-[0_0_15px_rgba(99,102,241,0.2)] scale-[1.02]" : isD ? "border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/5" : "border-slate-200 dark:border-white/5 bg-white/50 dark:bg-white/5 opacity-60"}`}>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-lg font-bold ${isW ? "text-indigo-600 dark:text-indigo-400" : isD ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-gray-300"}`}>
+                            {t(a.zh, a.en)}
+                          </p>
+                          {isW && (
+                            <div className="flex gap-1">
+                              <div className="w-1.5 h-1.5 bg-indigo-500 dark:bg-indigo-400 rounded-full animate-bounce"></div>
+                              <div className="w-1.5 h-1.5 bg-indigo-500 dark:bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                          )}
+                          {isD && (
+                            <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500 dark:text-gray-400 mt-2 leading-relaxed">
+                          {isW ? t(a.workZh, a.workEn) : isD ? t("任务已完成，参数已传递至下一节点。", "Task completed, parameters passed to the next node.") : t("等待前置节点完成...", "Waiting for previous node...")}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 结果区 */}
+              {result ? (
+                <div className="border rounded-[2rem] p-8 bg-white/70 dark:bg-white/5 backdrop-blur-2xl border-indigo-200 dark:border-indigo-500/30 shadow-[0_0_40px_rgba(99,102,241,0.1)] dark:shadow-[0_0_40px_rgba(99,102,241,0.15)] h-fit animate-pulse transition-colors duration-500" style={{ animationIterationCount: 1 }}>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-white">🎧 {t("生成结果", "Generated Result")}</h2>
+                    <span className="px-3 py-1 text-xs rounded-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 text-indigo-600 dark:text-indigo-300 font-mono font-bold">{costText}</span>
+                  </div>
+                  <div className="p-5 border rounded-2xl bg-white dark:bg-black/30 border-slate-200 dark:border-white/5 shadow-inner">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="font-medium text-slate-700 dark:text-gray-300 line-clamp-1">{prompt}</span>
+                    </div>
+                    <audio controls className="w-full" src={result.final_audio_url || ""}></audio>
+                  </div>
+
+                  <div className="mt-6">
+                    <a href={result.final_audio_url || "#"} download className="block w-full text-center py-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors shadow-md">
+                      {t("下载完整音频", "Download Full Track")}
+                    </a>
+                  </div>
+
+                  {features.stem && result.stems_urls && (
+                    <div className="mt-6 pt-6 border-t border-slate-200 dark:border-white/10">
+                       <h3 className="text-sm font-bold text-slate-500 dark:text-gray-400 mb-3">{t("独立音轨 (Stems)", "Separated Stems")}</h3>
+                       <div className="grid grid-cols-2 gap-3">
+                        {Object.entries(result.stems_urls).map(([k, url]) => (
+                          url ? (
+                            <a key={k} href={url} target="_blank" className="p-3 text-center rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/5 text-sm text-slate-700 dark:text-gray-300 font-medium transition-colors">
+                              {k.toUpperCase()}
+                            </a>
+                          ) : null
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="border rounded-[2rem] p-8 bg-white/50 dark:bg-white/5 backdrop-blur-2xl border-slate-200 dark:border-white/10 shadow-xl shadow-indigo-100/30 dark:shadow-2xl flex flex-col items-center justify-center h-full min-h-[400px] opacity-70 transition-colors duration-500">
+                   <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-4">
+                     <span className="text-2xl opacity-50">🎵</span>
+                   </div>
+                   <p className="text-slate-500 dark:text-gray-400 text-center max-w-xs font-medium">
+                     {t("配置左侧参数并点击生成，您的音乐作品及多轨文件将展示在此处。", "Configure parameters and click generate. Your music will appear here.")}
+                   </p>
+                </div>
+              )}
+            </section>
+          </main>
+
+          {/* 登录模态框 */}
+          {showLogin && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowLogin(false)}></div>
+              <div className="relative bg-white dark:bg-[#0f172a] w-full max-w-md rounded-[2rem] shadow-2xl p-8 border border-slate-100 dark:border-white/10 transition-colors">
+                <button className="absolute right-6 top-6 text-slate-400 dark:text-gray-500 hover:text-slate-800 dark:hover:text-white transition-colors" onClick={() => setShowLogin(false)}>✕</button>
+                <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center mb-6">👤</div>
+                <h3 className="text-2xl font-bold mb-2 text-slate-800 dark:text-white">{t("欢迎使用 MAMS", "Welcome to MAMS")}</h3>
+                <p className="text-sm text-slate-500 dark:text-gray-400 mb-8">
+                  {t("登录或注册以在云端保存您的音乐作品及多轨工程文件。", "Log in or sign up to save your tracks and stems.")}
+                </p>
+                <button className="w-full py-4 rounded-xl bg-slate-50 dark:bg-white text-slate-800 dark:text-black font-bold flex items-center justify-center gap-3 hover:bg-slate-100 dark:hover:bg-gray-200 transition-colors border border-slate-200 dark:border-transparent">
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                  {t("使用 Google 账号继续", "Continue with Google")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+    /* 👇 告诉 Django 这里可以继续解析了 👇 */
+    {% endverbatim %}
+  </script>
+</body>
+</html>
